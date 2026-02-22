@@ -57,13 +57,13 @@ if not groq_api_key:
 mongo_uri = build_mongo_uri()
 db_name = os.getenv("MONGO_DB_NAME", "chatbot")
 collection_name = os.getenv("MONGO_COLLECTION", "users")
-
+# ---- Connect your app to MongoDB (local or Atlas).
 client = MongoClient(mongo_uri, serverSelectionTimeoutMS=10000, connectTimeoutMS=10000)
 db = client[db_name]
 collection = db[collection_name]
 
 app = FastAPI()
-
+# ------- Accept user input and return responses.
 class ChatRequest(BaseModel):
     user_id: str
     question: str
@@ -82,11 +82,13 @@ try:
 except PyMongoError as err:
     raise RuntimeError(f"MongoDB connection failed: {err}") from err
 
+# --------- Connect the chatbot to an LLM
+# Add a system prompt
+# Allow users to ask academic or learning-related questions.
 prompt = ChatPromptTemplate.from_messages(
     [
-        (
-            "system",
-            "You are a experts in mentoring, respond to the user's question in a helpful and concise manner. If you don't know the answer, say you don't know."),
+        ("system",
+            "You are a Study Bot (AI Study Assistant). Explain clearly, step-by-step, with examples."),
         ("placeholder", "{history}"),
         ("user", "{question}"),
     ]
@@ -95,8 +97,7 @@ prompt = ChatPromptTemplate.from_messages(
 llm = ChatGroq(api_key=groq_api_key, model="openai/gpt-oss-20b")
 chain = prompt | llm
 
-# user_id = "user123"
-
+# Retrieve previous messages to provide context-aware responses.
 def get_history(user_id:str):
     chats = collection.find({"user_id" : user_id}).sort("timestamp", 1)
     history = []
@@ -137,7 +138,7 @@ def chat(request: ChatRequest):
             "timestamp": datetime.now(timezone.utc),
         },
     ]
-
+# -------------------- Store user messages and bot responses.
     try:
         result = collection.insert_many(docs, ordered=True)
         safe_print(f"Saved to MongoDB: {len(result.inserted_ids)} documents")
